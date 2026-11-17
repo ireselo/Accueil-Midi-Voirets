@@ -1,0 +1,30 @@
+{
+  "expo": {
+    "name": "Accueil Midi-Voirets",
+    "slug": "accueil-midi-voirets",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "ch.voirets.accueilmidi",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Cette application utilise l'appareil photo pour scanner les codes QR des élèves et adultes inscrits à la cafétéria."
+      }
+    },
+    "android": {
+      "package": "ch.voirets.accueilmidi",
+      "permissions": [
+        "android.permission.CAMERA"
+      ]
+    },
+    "plugins": [
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Autoriser $(PRODUCT_NAME) à utiliser l'appareil photo pour scanner les codes QR de présence."
+        }
+      ]
+    ]
+  }
+}
