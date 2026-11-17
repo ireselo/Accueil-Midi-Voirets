@@ -1,5 +1,5 @@
 // Script d'initialisation des données dans Supabase (https://ypbqpjcskybkzzhhehme.supabase.co)
-// Exécuter après la création des tables SQL : node supabase/seed_initial_data.mjs
+// Exécuter avec : node --env-file=.env supabase/seed_initial_data.mjs
 
 const SUPABASE_URL =
   process.env.EXPO_PUBLIC_SUPABASE_URL || 'https://ypbqpjcskybkzzhhehme.supabase.co';
@@ -31,8 +31,25 @@ async function upsertRest(table, rows, onConflict) {
   return JSON.parse(text);
 }
 
+async function callRpc(fnName, params) {
+  const url = `${SUPABASE_URL}/rest/v1/rpc/${fnName}`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      apikey: SUPABASE_KEY,
+      Authorization: `Bearer ${SUPABASE_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(params),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Erreur RPC ${fnName} (${res.status}): ${text}`);
+  }
+}
+
 async function main() {
-  console.log('Vérification et insertion des paramètres globaux (CHF & limite 40 personnes)...');
+  console.log('1. Configuration des paramètres globaux (CHF & limite 40 personnes au total)...');
   await upsertRest(
     'app_settings',
     [
@@ -55,7 +72,7 @@ async function main() {
     'id'
   );
 
-  console.log('Insertion des menus de la semaine en français...');
+  console.log('2. Insertion des menus de la semaine en français (Lun, Mar, Jeu, Ven)...');
   const menus = await upsertRest(
     'menus',
     [
@@ -99,7 +116,12 @@ async function main() {
     'meal_date'
   );
 
-  console.log(`✅ Initialisation réussie (${menus.length} menus configurés) !`);
+  console.log('3. Génération automatique des 6 inscriptions permanentes CLI pour la semaine...');
+  for (const m of menus) {
+    await callRpc('ensure_cli_reservations_for_date', { p_meal_date: m.meal_date });
+  }
+
+  console.log(`✅ Base de données Supabase (ypbqpjcskybkzzhhehme) prête et synchronisée !`);
 }
 
 main().catch((err) => {

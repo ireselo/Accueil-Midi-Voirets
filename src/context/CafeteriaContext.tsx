@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useMemo, useState } from 'react';
+import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import { supabase } from '../lib/supabase';
 import {
   AppSettings,
   CliInvoice,
@@ -378,6 +379,41 @@ export const CafeteriaProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       created_at: '2026-11-23T15:00:00Z',
     },
   ]);
+
+  // Synchronisation initiale avec la base de données Supabase (ypbqpjcskybkzzhhehme)
+  useEffect(() => {
+    async function fetchSupabaseData() {
+      try {
+        const { data: dbSettings } = await supabase
+          .from('app_settings')
+          .select('*')
+          .eq('id', 1)
+          .single();
+        if (dbSettings) {
+          setSettings((prev) => ({
+            ...prev,
+            ...dbSettings,
+            price_adult_chf: Number(dbSettings.price_adult_chf),
+            price_student_chf: Number(dbSettings.price_student_chf),
+            price_student_partial_chf: Number(dbSettings.price_student_partial_chf),
+            price_student_full_chf: Number(dbSettings.price_student_full_chf),
+            cli_meal_price_chf: Number(dbSettings.cli_meal_price_chf),
+          }));
+        }
+
+        const { data: dbMenus } = await supabase
+          .from('menus')
+          .select('*')
+          .order('meal_date', { ascending: true });
+        if (dbMenus && dbMenus.length > 0) {
+          setMenus(dbMenus as MenuDay[]);
+        }
+      } catch {
+        // Fallback sur les données locales si hors-ligne
+      }
+    }
+    fetchSupabaseData();
+  }, []);
 
   // Nombre total d'inscrits confirmés pour la journée (inclut les 6 places CLI actives)
   const getDailyConfirmedCount = (mealDate: string): number => {

@@ -7,7 +7,8 @@ export const supabaseUrl =
   process.env.EXPO_PUBLIC_SUPABASE_URL ??
   `https://${SUPABASE_PROJECT_ID}.supabase.co`;
 export const supabaseAnonKey =
-  process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? 'votre-cle-publique-anon';
+  process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ??
+  'sb_publishable_IruKX5pHzBNXCmVbXPtY0Q_tRw3b3cM';
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
