@@ -1,5 +1,5 @@
 # Configuration Supabase pour Accueil Midi-Voirets
-project_id = "accueil-midi-voirets"
+project_id = "ypbqpjcskybkzzhhehme"
 
 [api]
 enabled = true
