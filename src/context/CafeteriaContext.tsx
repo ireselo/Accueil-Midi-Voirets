@@ -25,6 +25,8 @@ interface RegisterUserInput {
   firstName: string;
   lastName: string;
   email: string;
+  password: string;
+  confirmPassword: string;
   initialCategory: 'adult' | 'student';
   classNumber?: string;
 }
@@ -42,8 +44,17 @@ interface CafeteriaContextValue {
   reservations: Reservation[];
   payments: PaymentRecord[];
   cliInvoices: CliInvoice[];
-  // Authentification & Profil
-  registerNewUser: (input: RegisterUserInput) => { ok: boolean; messageFr: string };
+  // Authentification & Profil (avec mot de passe Supabase Auth)
+  loginWithPassword: (
+    email: string,
+    password: string
+  ) => Promise<{ ok: boolean; messageFr: string }>;
+  registerNewUser: (
+    input: RegisterUserInput
+  ) => Promise<{ ok: boolean; messageFr: string }>;
+  resetPasswordForEmail: (
+    email: string
+  ) => Promise<{ ok: boolean; messageFr: string }>;
   switchDemoUser: (userId: string) => void;
   logout: () => void;
   // Réservation & Paiement Twint (Payrexx)
@@ -428,16 +439,102 @@ export const CafeteriaProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     return Math.max(0, settings.max_capacity - confirmed);
   };
 
-  const registerNewUser = (input: RegisterUserInput) => {
+  const loginWithPassword = async (
+    emailInput: string,
+    passwordInput: string
+  ): Promise<{ ok: boolean; messageFr: string }> => {
+    const email = emailInput.trim().toLowerCase();
+    const password = passwordInput;
+
+    if (!email || !password) {
+      return {
+        ok: false,
+        messageFr: 'Veuillez saisir votre adresse e-mail et votre mot de passe.',
+      };
+    }
+
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (!error && data?.user) {
+        const { data: profileData } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', data.user.id)
+          .single();
+
+        if (profileData) {
+          const loggedProfile: UserProfile = {
+            id: profileData.id,
+            first_name: profileData.first_name,
+            last_name: profileData.last_name,
+            email: profileData.email,
+            category: profileData.category,
+            class_number: profileData.class_number,
+            staff_roles: profileData.staff_roles ?? [],
+            created_at: profileData.created_at,
+          };
+          setCurrentUser(loggedProfile);
+          setUsers((prev) =>
+            prev.some((u) => u.id === loggedProfile.id)
+              ? prev.map((u) => (u.id === loggedProfile.id ? loggedProfile : u))
+              : [loggedProfile, ...prev]
+          );
+          return {
+            ok: true,
+            messageFr: `Connexion réussie. Bonjour ${loggedProfile.first_name} ${loggedProfile.last_name} !`,
+          };
+        }
+      }
+
+      if (error) {
+        return {
+          ok: false,
+          messageFr: 'Adresse e-mail ou mot de passe incorrect.',
+        };
+      }
+    } catch {
+      // Fallback hors-ligne si nécessaire
+    }
+
+    return {
+      ok: false,
+      messageFr: 'Impossible de se connecter avec ces identifiants.',
+    };
+  };
+
+  const registerNewUser = async (
+    input: RegisterUserInput
+  ): Promise<{ ok: boolean; messageFr: string }> => {
     const firstName = input.firstName.trim();
     const lastName = input.lastName.trim();
     const email = input.email.trim().toLowerCase();
+    const password = input.password;
+    const confirmPassword = input.confirmPassword;
     const classNumber = input.classNumber?.trim() || null;
 
-    if (!firstName || !lastName || !email) {
+    if (!firstName || !lastName || !email || !password) {
       return {
         ok: false,
-        messageFr: 'Veuillez renseigner votre prénom, votre nom et votre adresse e-mail.',
+        messageFr:
+          'Veuillez renseigner votre prénom, votre nom, votre adresse e-mail et un mot de passe.',
+      };
+    }
+
+    if (password.length < 6) {
+      return {
+        ok: false,
+        messageFr: 'Le mot de passe doit contenir au moins 6 caractères.',
+      };
+    }
+
+    if (password !== confirmPassword) {
+      return {
+        ok: false,
+        messageFr: 'Les deux mots de passe ne correspondent pas.',
       };
     }
 
@@ -448,25 +545,82 @@ export const CafeteriaProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       };
     }
 
-    const newUser: UserProfile = {
-      id: `user-${Date.now()}`,
-      first_name: firstName,
-      last_name: lastName,
-      email,
-      category: input.initialCategory,
-      class_number: input.initialCategory === 'student' ? classNumber : null,
-      staff_roles: [],
-      created_at: new Date().toISOString(),
-    };
+    // Création du compte dans Supabase Auth (auth.users + trigger vers public.profiles)
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            first_name: firstName,
+            last_name: lastName,
+            category: input.initialCategory,
+            class_number: input.initialCategory === 'student' ? classNumber : null,
+          },
+        },
+      });
 
-    setUsers((prev) => [...prev, newUser]);
-    setCurrentUser(newUser);
-    return {
-      ok: true,
-      messageFr: `Bienvenue ${firstName} ${lastName} ! Votre compte (${
-        input.initialCategory === 'adult' ? 'Adulte' : `Élève — Classe ${classNumber}`
-      }) a été créé.`,
-    };
+      if (error) {
+        return {
+          ok: false,
+          messageFr: `Erreur lors de la création du compte : ${error.message}`,
+        };
+      }
+
+      const newUser: UserProfile = {
+        id: data?.user?.id ?? `user-${Date.now()}`,
+        first_name: firstName,
+        last_name: lastName,
+        email,
+        category: input.initialCategory,
+        class_number: input.initialCategory === 'student' ? classNumber : null,
+        staff_roles: [],
+        created_at: new Date().toISOString(),
+      };
+
+      setUsers((prev) => [...prev, newUser]);
+      setCurrentUser(newUser);
+      return {
+        ok: true,
+        messageFr: `Bienvenue ${firstName} ${lastName} ! Votre compte (${
+          input.initialCategory === 'adult' ? 'Adulte' : `Élève — Classe ${classNumber}`
+        }) et votre mot de passe ont bien été enregistrés.`,
+      };
+    } catch {
+      return {
+        ok: false,
+        messageFr: 'Erreur réseau lors de la création du compte.',
+      };
+    }
+  };
+
+  const resetPasswordForEmail = async (
+    emailInput: string
+  ): Promise<{ ok: boolean; messageFr: string }> => {
+    const email = emailInput.trim().toLowerCase();
+    if (!email) {
+      return {
+        ok: false,
+        messageFr:
+          'Veuillez saisir votre adresse e-mail pour recevoir le lien de réinitialisation.',
+      };
+    }
+
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email);
+      if (error) {
+        return { ok: false, messageFr: error.message };
+      }
+      return {
+        ok: true,
+        messageFr: `Un e-mail de réinitialisation du mot de passe a été envoyé à ${email}.`,
+      };
+    } catch {
+      return {
+        ok: false,
+        messageFr: 'Impossible d’envoyer l’e-mail de réinitialisation.',
+      };
+    }
   };
 
   const switchDemoUser = (userId: string) => {
@@ -474,7 +628,10 @@ export const CafeteriaProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     if (found) setCurrentUser(found);
   };
 
-  const logout = () => setCurrentUser(null);
+  const logout = () => {
+    supabase.auth.signOut().catch(() => {});
+    setCurrentUser(null);
+  };
 
   const bookAndPayWithTwint = (mealDate: string, service: ServiceSlot) => {
     if (!currentUser) {
@@ -925,7 +1082,9 @@ export const CafeteriaProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       reservations,
       payments,
       cliInvoices,
+      loginWithPassword,
       registerNewUser,
+      resetPasswordForEmail,
       switchDemoUser,
       logout,
       getDailyConfirmedCount,

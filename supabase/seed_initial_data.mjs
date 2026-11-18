@@ -1,4 +1,4 @@
-// Script d'initialisation des données dans Supabase (https://ypbqpjcskybkzzhhehme.supabase.co)
+// Script d'initialisation des données et des comptes dans Supabase (https://ypbqpjcskybkzzhhehme.supabase.co)
 // Exécuter avec : node --env-file=.env supabase/seed_initial_data.mjs
 
 const SUPABASE_URL =
@@ -48,6 +48,51 @@ async function callRpc(fnName, params) {
   }
 }
 
+async function ensureAuthUser(userSpec) {
+  // Créer l'utilisateur via l'API Admin Auth de Supabase avec mot de passe chiffré
+  const res = await fetch(`${SUPABASE_URL}/auth/v1/admin/users`, {
+    method: 'POST',
+    headers: {
+      apikey: SUPABASE_KEY,
+      Authorization: `Bearer ${SUPABASE_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      email: userSpec.email,
+      password: userSpec.password,
+      email_confirm: true,
+      user_metadata: {
+        first_name: userSpec.first_name,
+        last_name: userSpec.last_name,
+        category: userSpec.category === 'adult' ? 'adult' : 'student',
+        class_number: userSpec.class_number,
+      },
+    }),
+  });
+
+  // Mettre à jour la catégorie exacte (ex: subvention partielle/totale) et les rôles staff dans public.profiles
+  const profileRes = await fetch(
+    `${SUPABASE_URL}/rest/v1/profiles?email=eq.${encodeURIComponent(userSpec.email)}`,
+    {
+      method: 'PATCH',
+      headers: {
+        apikey: SUPABASE_KEY,
+        Authorization: `Bearer ${SUPABASE_KEY}`,
+        'Content-Type': 'application/json',
+        Prefer: 'return=representation',
+      },
+      body: JSON.stringify({
+        category: userSpec.category,
+        class_number: userSpec.class_number,
+        staff_roles: userSpec.staff_roles,
+      }),
+    }
+  );
+  if (profileRes.ok) {
+    console.log(`   ✓ Compte vérifié : ${userSpec.email} (${userSpec.category})`);
+  }
+}
+
 async function main() {
   console.log('1. Configuration des paramètres globaux (CHF & limite 40 personnes au total)...');
   await upsertRest(
@@ -72,7 +117,51 @@ async function main() {
     'id'
   );
 
-  console.log('2. Insertion des menus de la semaine en français (Lun, Mar, Jeu, Ven)...');
+  console.log('2. Création des comptes utilisateurs initiaux avec mot de passe (Voirets2026!)...');
+  const demoUsers = [
+    {
+      email: 'sophie.rochat@voirets.ch',
+      password: 'Voirets2026!',
+      first_name: 'Sophie',
+      last_name: 'Rochat',
+      category: 'adult',
+      class_number: null,
+      staff_roles: ['administrateur', 'surveillant', 'cuisinier', 'civiliste', 'comptable'],
+    },
+    {
+      email: 'lucas.favre@edu.ge.ch',
+      password: 'Voirets2026!',
+      first_name: 'Lucas',
+      last_name: 'Favre',
+      category: 'student',
+      class_number: '9VG-2',
+      staff_roles: [],
+    },
+    {
+      email: 'emma.berset@edu.ge.ch',
+      password: 'Voirets2026!',
+      first_name: 'Emma',
+      last_name: 'Berset',
+      category: 'student_partial_subsidy',
+      class_number: '10LS-1',
+      staff_roles: [],
+    },
+    {
+      email: 'noah.keller@edu.ge.ch',
+      password: 'Voirets2026!',
+      first_name: 'Noah',
+      last_name: 'Keller',
+      category: 'student_full_subsidy',
+      class_number: '11CT-3',
+      staff_roles: [],
+    },
+  ];
+
+  for (const u of demoUsers) {
+    await ensureAuthUser(u);
+  }
+
+  console.log('3. Insertion des menus de la semaine en français (Lun, Mar, Jeu, Ven)...');
   const menus = await upsertRest(
     'menus',
     [
@@ -116,12 +205,12 @@ async function main() {
     'meal_date'
   );
 
-  console.log('3. Génération automatique des 6 inscriptions permanentes CLI pour la semaine...');
+  console.log('4. Génération automatique des 6 inscriptions permanentes CLI pour la semaine...');
   for (const m of menus) {
     await callRpc('ensure_cli_reservations_for_date', { p_meal_date: m.meal_date });
   }
 
-  console.log(`✅ Base de données Supabase (ypbqpjcskybkzzhhehme) prête et synchronisée !`);
+  console.log(`✅ Base de données et comptes Auth Supabase (ypbqpjcskybkzzhhehme) synchronisés !`);
 }
 
 main().catch((err) => {
