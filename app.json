@@ -7,24 +7,10 @@
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "ch.voirets.accueilmidi",
-      "infoPlist": {
-        "NSCameraUsageDescription": "Cette application utilise l'appareil photo pour scanner les codes QR des élèves et adultes inscrits à la cafétéria."
-      }
+      "bundleIdentifier": "ch.voirets.accueilmidi"
     },
     "android": {
-      "package": "ch.voirets.accueilmidi",
-      "permissions": [
-        "android.permission.CAMERA"
-      ]
-    },
-    "plugins": [
-      [
-        "expo-camera",
-        {
-          "cameraPermission": "Autoriser $(PRODUCT_NAME) à utiliser l'appareil photo pour scanner les codes QR de présence."
-        }
-      ]
-    ]
+      "package": "ch.voirets.accueilmidi"
+    }
   }
 }
